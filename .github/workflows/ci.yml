@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: Secret leaks (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  credentials:
+    name: Manifest credentials and variables
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No credentials with literal values in env
+        run: |
+          if [ ! -d k8s ]; then echo "No manifests yet"; exit 0; fi
+          if grep -rnE -A1 'name:\s*\S*(PASSWORD|SECRET|TOKEN)' k8s/ | grep -E '^\S+-[0-9]+-\s*value:'; then
+            echo "::error::Credential with literal value in manifest. Use secretKeyRef."
+            exit 1
+          fi
+          echo "OK: no credentials with literal values in env"
+      - name: No Secret manifests in repo
+        run: |
+          if [ ! -d k8s ]; then echo "No manifests yet"; exit 0; fi
+          if grep -rlE '^kind:\s*Secret' k8s/; then
+            echo "::error::Secret manifest in repo. The Secret must be created by scripts/create-secret.sh."
+            exit 1
+          fi
+          echo "OK: no Secret manifests versioned"
+
+  manifests:
+    name: Manifest validation (kubeconform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install kubeconform
+        run: |
+          curl -sL https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin/
+      - name: Validate manifests
+        run: |
+          if [ -d k8s ]; then kubeconform -strict -summary k8s/; else echo "No manifests yet"; fi
