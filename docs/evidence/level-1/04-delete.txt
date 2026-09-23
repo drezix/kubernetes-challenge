@@ -1,0 +1,8 @@
+$ kubectl get pod test-pod -n kubernetes-challenge -o jsonpath="{.metadata.ownerReferences}"
+(empty: no owner)
+
+$ kubectl delete pod test-pod -n kubernetes-challenge
+pod "test-pod" deleted from kubernetes-challenge namespace
+
+$ kubectl get pods -n kubernetes-challenge
+No resources found in kubernetes-challenge namespace.

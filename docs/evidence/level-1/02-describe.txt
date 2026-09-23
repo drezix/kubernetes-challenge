@@ -1,0 +1,52 @@
+$ kubectl describe pod test-pod -n kubernetes-challenge
+Name:             test-pod
+Namespace:        kubernetes-challenge
+Priority:         0
+Service Account:  default
+Node:             docker-desktop/192.168.65.3
+Start Time:       Wed, 23 Sep 2026 20:59:17 -0300
+Labels:           app=test-pod
+Annotations:      <none>
+Status:           Running
+IP:               10.1.0.19
+IPs:
+  IP:  10.1.0.19
+Containers:
+  nginx:
+    Container ID:   docker://9752ef68f4502e8927b0d52c36766cdd6b69922e8facc148185d1e431977ce48
+    Image:          nginx:1.27-alpine
+    Image ID:       docker-pullable://nginx@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10
+    Port:           80/TCP
+    Host Port:      0/TCP
+    State:          Running
+      Started:      Wed, 23 Sep 2026 20:59:18 -0300
+    Ready:          True
+    Restart Count:  0
+    Environment:    <none>
+    Mounts:
+      /var/run/secrets/kubernetes.io/serviceaccount from kube-api-access-9hkqg (ro)
+Conditions:
+  Type                        Status
+  PodReadyToStartContainers   True 
+  Initialized                 True 
+  Ready                       True 
+  ContainersReady             True 
+  PodScheduled                True 
+Volumes:
+  kube-api-access-9hkqg:
+    Type:                    Projected (a volume that contains injected data from multiple sources)
+    TokenExpirationSeconds:  3607
+    ConfigMapName:           kube-root-ca.crt
+    Optional:                false
+    DownwardAPI:             true
+QoS Class:                   BestEffort
+Node-Selectors:              <none>
+Tolerations:                 node.kubernetes.io/not-ready:NoExecute op=Exists for 300s
+                             node.kubernetes.io/unreachable:NoExecute op=Exists for 300s
+Events:
+  Type    Reason     Age   From               Message
+  ----    ------     ----  ----               -------
+  Normal  Scheduled  10s   default-scheduler  Successfully assigned kubernetes-challenge/test-pod to docker-desktop
+  Normal  Pulled     9s    kubelet            Container image "nginx:1.27-alpine" already present on machine
+  Normal  Created    9s    kubelet            Created container: nginx
+  Normal  Started    9s    kubelet            Started container nginx
