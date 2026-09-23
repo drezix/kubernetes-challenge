@@ -80,7 +80,7 @@ The API reaches the database by the **name of the Postgres Service** (cluster DN
 Each level was developed in its own branch and merged through a pull request.
 
 - [x] **Level 0 — Prerequisites:** local cluster responding, node `Ready`
-- [ ] **Level 1 — Namespace and first Pod:** prove that a bare Pod does not come back by itself
+- [x] **Level 1 — Namespace and first Pod:** prove that a bare Pod does not come back by itself
 - [ ] **Level 2 — PostgreSQL with persistence:** Deployment + PVC + ClusterIP Service
 - [ ] **Level 3 — ConfigMap and Secret:** configuration and credentials out of the Deployment manifest
 - [ ] **Level 4 — PostgREST + PostgreSQL:** API connected to the database by Service name
@@ -102,3 +102,30 @@ kubectl get nodes                # STATUS must be Ready
 ```
 
 ![Cluster ready](docs/evidence/level-0/cluster-ready.png)
+
+## Level 1 — Namespace and first Pod
+
+Every resource of the challenge lives in its own namespace, [`k8s/00-namespace.yaml`](k8s/00-namespace.yaml). A bare Pod ([`k8s/extras/test-pod.yaml`](k8s/extras/test-pod.yaml)) was created, inspected and deleted.
+
+```bash
+kubectl apply -f k8s/00-namespace.yaml
+kubectl apply -f k8s/extras/test-pod.yaml
+kubectl get pods -n kubernetes-challenge -o wide
+kubectl describe pod test-pod -n kubernetes-challenge
+kubectl logs test-pod -n kubernetes-challenge
+kubectl delete pod test-pod -n kubernetes-challenge
+```
+
+```text
+$ kubectl delete pod test-pod -n kubernetes-challenge
+pod "test-pod" deleted from kubernetes-challenge namespace
+
+$ kubectl get pods -n kubernetes-challenge
+No resources found in kubernetes-challenge namespace.
+```
+
+Full outputs: [get](docs/evidence/level-1/01-get.txt) · [describe](docs/evidence/level-1/02-describe.txt) · [logs](docs/evidence/level-1/03-logs.txt) · [delete](docs/evidence/level-1/04-delete.txt)
+
+**Does the deleted Pod come back by itself?** No. The Pod has no `ownerReferences`: no ReplicaSet is watching it, so nobody notices it is gone. That's why Pods are rarely created directly. A Deployment creates a ReplicaSet, which keeps comparing "desired" with "actual" and recreates missing Pods. Level 5 relies on exactly that.
+
+> `k8s/extras/` is not applied by `kubectl apply -f k8s/`, because that command is not recursive. The test Pod is a one-off exercise, not part of the stack.
