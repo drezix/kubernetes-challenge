@@ -1,5 +1,3 @@
-# Bare Pod with no owner (no Deployment/ReplicaSet).
-# Used in Level 1 to show that a deleted bare Pod is not recreated.
 apiVersion: v1
 kind: Pod
 metadata:

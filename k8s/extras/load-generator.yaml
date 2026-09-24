@@ -1,5 +1,3 @@
-# Sends continuous requests to the API Service to trigger the HPA (Level 7).
-# Each loop opens new connections, so the load is spread across all replicas.
 apiVersion: v1
 kind: Pod
 metadata:

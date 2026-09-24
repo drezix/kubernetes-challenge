@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Creates (or updates) the postgres-secret Secret from a local .env file,
-# so no credential is ever written to a versioned manifest.
 set -euo pipefail
 
 ENV_FILE="${1:-.env}"
@@ -11,7 +9,6 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# Strip CRLF so a .env saved on Windows doesn't leave '\r' in the values
 CLEAN_ENV="$(mktemp)"
 trap 'rm -f "$CLEAN_ENV"' EXIT
 tr -d '\r' < "$ENV_FILE" > "$CLEAN_ENV"

@@ -11,7 +11,6 @@ spec:
   minReplicas: 2
   maxReplicas: 6
   metrics:
-    # Utilization is relative to the container's CPU request (50m)
     - type: Resource
       resource:
         name: cpu
@@ -19,6 +18,5 @@ spec:
           type: Utilization
           averageUtilization: 50
   behavior:
-    # Default is 300s; shortened so the scale-down is visible in the demo
     scaleDown:
       stabilizationWindowSeconds: 60

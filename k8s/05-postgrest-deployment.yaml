@@ -6,7 +6,6 @@ metadata:
   labels:
     app: postgrest
 spec:
-  # No "replicas" here: the HPA (07-postgrest-hpa.yaml) owns the replica count
   selector:
     matchLabels:
       app: postgrest
@@ -64,11 +63,8 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: PGRST_LOG_LEVEL
-            # $(VAR) is expanded by Kubernetes from the variables above,
-            # so the password is never written in this file
             - name: PGRST_DB_URI
               value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):5432/$(POSTGRES_DB)
-          # Liveness: is the process alive? Failing it restarts the container.
           livenessProbe:
             httpGet:
               path: /live
@@ -76,8 +72,6 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
             failureThreshold: 3
-          # Readiness: can it serve now (DB connected, schema cache loaded)?
-          # Failing it only removes the Pod from the Service endpoints.
           readinessProbe:
             httpGet:
               path: /ready

@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# Installs metrics-server, which the HPA needs to read Pod CPU usage.
-# Docker Desktop's kubelet uses a self-signed certificate, so TLS verification
-# against the kubelet is disabled with --kubelet-insecure-tls (local clusters only).
 set -euo pipefail
 
 VERSION="v0.7.2"

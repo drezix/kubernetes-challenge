@@ -1,3 +1,2 @@
-# Local credentials: the Secret is created from .env by scripts/create-secret.sh
 .env
 k8s/*secret*.yaml

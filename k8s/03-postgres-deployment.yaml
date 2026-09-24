@@ -7,7 +7,6 @@ metadata:
     app: postgres
 spec:
   replicas: 1
-  # Recreate: the old Pod releases the ReadWriteOnce volume before the new one starts
   strategy:
     type: Recreate
   selector:
@@ -40,19 +39,16 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: POSTGRES_DB
-            # Subfolder: the volume root has lost+found, and initdb requires an empty directory
             - name: PGDATA
               valueFrom:
                 configMapKeyRef:
                   name: app-config
                   key: PGDATA
-          # pg_isready checks that the server accepts connections
           readinessProbe:
             exec:
               command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
             initialDelaySeconds: 5
             periodSeconds: 5
-          # Generous liveness: crash recovery after an abrupt stop can take a while
           livenessProbe:
             exec:
               command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]

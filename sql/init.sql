@@ -1,4 +1,3 @@
--- Schema exposed by PostgREST (PGRST_DB_SCHEMAS=api)
 CREATE SCHEMA IF NOT EXISTS api;
 
 CREATE TABLE IF NOT EXISTS api.tasks (
@@ -8,7 +7,6 @@ CREATE TABLE IF NOT EXISTS api.tasks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Role used for anonymous requests (PGRST_DB_ANON_ROLE=web_anon)
 DO $$
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'web_anon') THEN
@@ -20,7 +18,6 @@ $$;
 GRANT USAGE ON SCHEMA api TO web_anon;
 GRANT SELECT, INSERT ON api.tasks TO web_anon;
 
--- PostgREST logs in as the Secret's user and switches to web_anon per request
 GRANT web_anon TO CURRENT_USER;
 
 INSERT INTO api.tasks (title)
