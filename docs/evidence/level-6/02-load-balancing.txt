@@ -1,0 +1,11 @@
+$ kubectl run lb-test --rm -i --restart=Never --image=curlimages/curl:8.10.1 -n kubernetes-challenge -- sh -c 'for i in $(seq 1 60); do curl -s -o /dev/null -H "Connection: close" http://postgrest:3000/tasks; done; echo done'
+done
+
+$ for p in $(kubectl get pods -l app=postgrest -n kubernetes-challenge -o name); do echo "$p: $(kubectl logs $p -n kubernetes-challenge | grep -c "GET /tasks")"; done
+pod/postgrest-847c756c5c-6sl9n: 21
+pod/postgrest-847c756c5c-77cr8: 25
+pod/postgrest-847c756c5c-xsg9d: 14
+
+$ kubectl logs <one postgrest pod> -n kubernetes-challenge | grep "GET /tasks" | tail -2
+10.1.0.31 - web_anon [24/Sep/2026:01:01:49 +0000] "GET /tasks HTTP/1.1" 200 - "" "curl/8.10.1"
+10.1.0.31 - web_anon [24/Sep/2026:01:01:49 +0000] "GET /tasks HTTP/1.1" 200 - "" "curl/8.10.1"

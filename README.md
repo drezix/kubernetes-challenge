@@ -85,7 +85,7 @@ Each level was developed in its own branch and merged through a pull request.
 - [x] **Level 3 — ConfigMap and Secret:** configuration and credentials out of the Deployment manifest
 - [x] **Level 4 — PostgREST + PostgreSQL:** API connected to the database by Service name
 - [x] **Level 5 — External access and persistence proof:** POST → delete DB Pod → same data on GET
-- [ ] **Level 6 — Health checks, resources and scaling:** probes, requests/limits, multiple API replicas
+- [x] **Level 6 — Health checks, resources and scaling:** probes, requests/limits, multiple API replicas
 - [ ] **Level 7 — HPA (bonus):** replicas scaling up and down with CPU load
 
 **Out of scope, on purpose:** Ingress, StatefulSet, Helm, cloud clusters, CD, TLS, database backups and JWT auth in PostgREST.
@@ -97,11 +97,13 @@ Each level was developed in its own branch and merged through a pull request.
 **Cluster tool:** Docker Desktop, with Kubernetes enabled in *Settings → Kubernetes → Enable Kubernetes*.
 
 ```bash
-kubectl config current-context   # docker-desktop
-kubectl get nodes                # STATUS must be Ready
-```
+$ kubectl config current-context   
+docker-desktop
 
-![Cluster ready](docs/evidence/level-0/cluster-ready.png)
+$ kubectl get nodes 
+NAME             STATUS   ROLES           AGE   VERSION
+docker-desktop   Ready    control-plane   9h    v1.34.1              
+```
 
 ## Level 1 — Namespace and first Pod
 
@@ -126,7 +128,6 @@ No resources found in kubernetes-challenge namespace.
 
 Full outputs: [get](docs/evidence/level-1/01-get.txt) · [describe](docs/evidence/level-1/02-describe.txt) · [logs](docs/evidence/level-1/03-logs.txt) · [delete](docs/evidence/level-1/04-delete.txt)
 
-**Does the deleted Pod come back by itself?** No. The Pod has no `ownerReferences`: no ReplicaSet is watching it, so nobody notices it is gone. That's why Pods are rarely created directly. A Deployment creates a ReplicaSet, which keeps comparing "desired" with "actual" and recreates missing Pods. Level 5 relies on exactly that.
 
 > `k8s/extras/` is not applied by `kubectl apply -f k8s/`, because that command is not recursive. The test Pod is a one-off exercise, not part of the stack.
 
@@ -142,7 +143,7 @@ Full outputs: [get](docs/evidence/level-1/01-get.txt) · [describe](docs/evidenc
 The credentials never touch a versioned file. `.env` is git-ignored, and [`.env.example`](.env.example) is the template. The Deployment only references the Secret through `secretKeyRef`. CI fails the build if a manifest contains a literal password or a `kind: Secret`.
 
 ```bash
-cp .env.example .env               # then set a real password: openssl rand -hex 16
+cp .env.example .env               # then set a real password with openssl rand -hex 16
 ./scripts/create-secret.sh
 kubectl apply -f k8s/
 kubectl rollout status deploy/postgres -n kubernetes-challenge
@@ -164,10 +165,6 @@ And the database answers through the Service DNS name `postgres.kubernetes-chall
 ```
 
 Full outputs: [PVC and PV](docs/evidence/level-2/01-pvc-pv.txt) · [resources](docs/evidence/level-2/02-resources.txt) · [connection via Service](docs/evidence/level-2/03-connect-via-service.txt)
-
-**PVC vs `emptyDir`:** an `emptyDir` is created with the Pod and deleted with it. It survives container restarts, but not Pod deletion. A PVC is a separate object with its own lifecycle: when the Pod is deleted, the claim and its PV remain, and the next Pod mounts the same data. Level 5 proves this.
-
-`PGDATA` points to a subfolder (`.../data/pgdata`) because the root of a freshly mounted volume may contain `lost+found`, and `initdb` refuses to run in a non-empty directory.
 
 ## Level 3 — ConfigMap and Secret
 
@@ -316,3 +313,48 @@ Full outputs: [POST and GET before](docs/evidence/level-5/01-post-and-get-before
 - **PostgREST** kept running the whole time and reconnected on its own.
 
 With an `emptyDir`, the second GET would return `[]`, and even the seed row from `init.sql` would be gone.
+
+## Level 6 — Health checks, resources and scaling
+
+| | PostgREST (3 replicas) | PostgreSQL (1 replica) |
+|---|---|---|
+| **Liveness** | `GET /live` on the admin port 3001 | `pg_isready`, 30s initial delay, 6 failures allowed |
+| **Readiness** | `GET /ready` on port 3001 (DB connected, schema cache loaded) | `pg_isready` |
+| **Requests** | 50m CPU / 64Mi | 100m CPU / 256Mi |
+| **Limits** | 250m CPU / 128Mi | 500m CPU / 512Mi |
+
+PostgREST exposes the health endpoints when `PGRST_ADMIN_SERVER_PORT` is set ([ConfigMap](k8s/01-configmap.yaml)). Probes are in [`k8s/05-postgrest-deployment.yaml`](k8s/05-postgrest-deployment.yaml) and [`k8s/03-postgres-deployment.yaml`](k8s/03-postgres-deployment.yaml).
+
+**Load balancing:** 60 requests sent from inside the cluster to `http://postgrest:3000/tasks`, then counted in each replica's logs (`PGRST_LOG_LEVEL=info` logs every request):
+
+```text
+pod/postgrest-847c756c5c-6sl9n: 21
+pod/postgrest-847c756c5c-77cr8: 25
+pod/postgrest-847c756c5c-xsg9d: 14
+```
+
+Each request opened a new connection (`Connection: close`). kube-proxy balances **connections**, not requests, so a client with keep-alive, like `kubectl port-forward`, sticks to one Pod.
+
+**Liveness vs readiness, in practice:** with the database scaled to 0, the API Pods stay alive, but readiness fails and the Service stops sending them traffic:
+
+```text
+$ kubectl scale deploy/postgres --replicas=0 -n kubernetes-challenge
+NAME                         READY   STATUS    RESTARTS
+postgrest-847c756c5c-6sl9n   0/1     Running   0
+postgrest-847c756c5c-77cr8   0/1     Running   0
+postgrest-847c756c5c-xsg9d   0/1     Running   0
+
+10.1.0.27  ready=false        # endpoints of the postgrest Service
+10.1.0.29  ready=false
+10.1.0.30  ready=false
+
+Warning  Unhealthy  kubelet  Readiness probe failed: HTTP probe failed with statuscode: 503
+```
+
+After scaling the database back to 1, all three return to `1/1` and `ready=true`, still with `RESTARTS 0`.
+
+Full outputs: [probes and resources](docs/evidence/level-6/01-probes-and-resources.txt) · [load balancing](docs/evidence/level-6/02-load-balancing.txt) · [liveness vs readiness](docs/evidence/level-6/03-liveness-vs-readiness.txt)
+
+**Liveness vs readiness:** liveness answers "is the process stuck?", and failing it **restarts** the container. Readiness answers "can it serve right now?", and failing it only **removes the Pod from the Service**. Restarting the API because the database is down would not help, so the API's liveness checks only the process. The dependency check belongs to readiness.
+
+**Why scale the API but not the database?** PostgREST is stateless: every replica reads the same database, so any replica can answer any request. PostgreSQL owns its data directory: two Postgres processes on the same PVC would corrupt it, and a `ReadWriteOnce` volume can't even attach to Pods on different nodes. Scaling a database needs replication (primary + replicas, each with its own volume), usually through a StatefulSet or an operator.

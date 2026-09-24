@@ -6,7 +6,7 @@ metadata:
   labels:
     app: postgrest
 spec:
-  replicas: 1
+  replicas: 3
   selector:
     matchLabels:
       app: postgrest
@@ -21,6 +21,8 @@ spec:
           ports:
             - containerPort: 3000
               name: http
+            - containerPort: 3001
+              name: admin
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -52,5 +54,36 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: PGRST_DB_ANON_ROLE
+            - name: PGRST_ADMIN_SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: PGRST_ADMIN_SERVER_PORT
+            - name: PGRST_LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: PGRST_LOG_LEVEL
             - name: PGRST_DB_URI
               value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):5432/$(POSTGRES_DB)
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
