@@ -23,3 +23,5 @@ GRANT web_anon TO CURRENT_USER;
 INSERT INTO api.tasks (title)
 SELECT 'First task, inserted via SQL'
 WHERE NOT EXISTS (SELECT FROM api.tasks);
+
+NOTIFY pgrst, 'reload schema';
