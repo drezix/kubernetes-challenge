@@ -169,13 +169,11 @@ kubectl delete namespace kubernetes-challenge
 **Cluster tool:** Docker Desktop, with Kubernetes enabled in *Settings → Kubernetes → Enable Kubernetes*.
 
 ```bash
-$ kubectl config current-context   
-docker-desktop
-
-$ kubectl get nodes 
-NAME             STATUS   ROLES           AGE   VERSION
-docker-desktop   Ready    control-plane   9h    v1.34.1              
+kubectl config current-context   # docker-desktop
+kubectl get nodes                # STATUS must be Ready
 ```
+
+![Node Ready](docs/evidence/level-0/nodes.png)
 
 ## Level 1 — Namespace and first Pod
 
@@ -189,6 +187,8 @@ kubectl describe pod test-pod -n kubernetes-challenge
 kubectl logs test-pod -n kubernetes-challenge
 kubectl delete pod test-pod -n kubernetes-challenge
 ```
+
+![Namespace created](docs/evidence/level-1/namespace.png)
 
 ```text
 $ kubectl delete pod test-pod -n kubernetes-challenge
@@ -222,12 +222,9 @@ kubectl apply -f k8s/
 kubectl rollout status deploy/postgres -n kubernetes-challenge
 ```
 
-The PVC is `Bound` to a PV that the StorageClass created:
+The PVC is `Bound` to a PV that the default StorageClass created:
 
-```text
-NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS
-postgres-pvc   Bound    pvc-447516d8-af91-420c-b769-aaf093dc0c0d   1Gi        RWO            hostpath
-```
+![StorageClass and PVC](docs/evidence/level-2/storageclass.png)
 
 And the database answers through the Service DNS name `postgres.kubernetes-challenge.svc.cluster.local`:
 
@@ -314,6 +311,8 @@ $ curl -s localhost:3000/tasks
 ```
 
 The request travels `curl → port-forward → Service postgrest → PostgREST Pod → Service postgres → Postgres Pod → PVC`.
+
+![Pods and Services](docs/evidence/level-4/services.png)
 
 Full outputs: [init.sql](docs/evidence/level-4/01-init-sql.txt) · [PostgREST logs](docs/evidence/level-4/02-postgrest-logs.txt) · [GET /tasks](docs/evidence/level-4/03-get-tasks.txt)
 
@@ -451,6 +450,26 @@ Under load, each of the 6 replicas used about 70m of CPU, over 140% of its 50m r
 Full outputs: [metrics and HPA](docs/evidence/level-7/01-metrics-and-hpa.txt) · [scale up and down](docs/evidence/level-7/02-scale-up-and-down.txt) · [top under load](docs/evidence/level-7/03-top-under-load.txt)
 
 > **Takeaway:** the HPA compares actual CPU with the **request**, so without `resources.requests` it can't scale. It scales up quickly, and scales down only after the stabilization window to avoid flapping.
+
+## Delivery evidence
+
+Captured after a fresh `./scripts/deploy.sh`.
+
+**Everything running in the namespace:**
+
+![kubectl get all](docs/evidence/delivery/get-all.png)
+
+**The API serving data from the database.** PostgREST connected to PostgreSQL through the Service and returns the row from `init.sql`:
+
+![API integration](docs/evidence/delivery/api.png)
+
+**Persistence, before:** a row is created through the API while Pod `postgres-7c5d4d957b-d26vx` (`10.1.0.45`) is running:
+
+![Persistence before](docs/evidence/delivery/persistence-before.png)
+
+**Persistence, after:** that Pod is deleted and replaced by `postgres-7c5d4d957b-6gr5p` (`10.1.0.46`). The API returns the same rows, with the same `id` and `created_at`:
+
+![Persistence after](docs/evidence/delivery/persistence-after.png)
 
 ## Acceptance criteria
 
