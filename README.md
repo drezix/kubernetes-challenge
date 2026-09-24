@@ -90,6 +90,78 @@ Each level was developed in its own branch and merged through a pull request.
 
 **Out of scope, on purpose:** Ingress, StatefulSet, Helm, cloud clusters, CD, TLS, database backups and JWT auth in PostgREST.
 
+## Quick start
+
+Requirements: Docker Desktop with Kubernetes enabled, `kubectl`, `curl` and a bash shell (Git Bash on Windows).
+
+```bash
+git clone https://github.com/drezix/kubernetes-challenge.git
+cd kubernetes-challenge
+
+cp .env.example .env                  # set POSTGRES_PASSWORD, e.g. openssl rand -hex 16
+./scripts/install-metrics-server.sh   # needed by the HPA
+./scripts/deploy.sh                   # namespace, Secret, manifests and sql/init.sql
+```
+
+Why a script and not just `kubectl apply -f k8s/`:
+
+- **Order matters.** The Secret doesn't exist as a file: `create-secret.sh` builds it from `.env` after the namespace exists. Then `sql/init.sql` must run once Postgres is up, because it creates the table and the role that PostgREST uses.
+- **Use a hex password** (`openssl rand -hex 16`). The password goes inside the connection URI `postgres://user:password@host/db`, and characters such as `@`, `/` or `:` would break it.
+- **`k8s/extras/` is not applied.** `kubectl apply -f k8s/` doesn't descend into subfolders. `test-pod.yaml` (Level 1) and `load-generator.yaml` (Level 7) are applied by hand.
+
+Test the integration:
+
+```bash
+kubectl port-forward svc/postgrest 3000:3000 -n kubernetes-challenge   # keep it running
+
+curl -s localhost:3000/tasks
+curl -s -X POST localhost:3000/tasks \
+  -H "Content-Type: application/json" -H "Prefer: return=representation" \
+  -d '{"title":"My task"}'
+```
+
+Test persistence:
+
+```bash
+kubectl delete pod -l app=postgres -n kubernetes-challenge
+kubectl wait --for=condition=Ready pod -l app=postgres -n kubernetes-challenge --timeout=120s
+curl -s localhost:3000/tasks          # same rows as before
+```
+
+Clean up. Deleting the namespace removes everything, including the PVC and its data:
+
+```bash
+kubectl delete namespace kubernetes-challenge
+```
+
+## Repository structure
+
+```text
+.
+├── .github/workflows/ci.yml          # gitleaks, credential checks, kubeconform
+├── k8s/
+│   ├── 00-namespace.yaml
+│   ├── 01-configmap.yaml
+│   ├── 02-postgres-pvc.yaml
+│   ├── 03-postgres-deployment.yaml
+│   ├── 04-postgres-service.yaml
+│   ├── 05-postgrest-deployment.yaml
+│   ├── 06-postgrest-service.yaml
+│   ├── 07-postgrest-hpa.yaml
+│   └── extras/                       # one-off Pods, not applied by `kubectl apply -f k8s/`
+│       ├── test-pod.yaml
+│       └── load-generator.yaml
+├── scripts/
+│   ├── create-secret.sh              # postgres-secret from .env
+│   ├── deploy.sh                     # full deploy in one command
+│   └── install-metrics-server.sh
+├── sql/init.sql                      # schema, table, web_anon role, seed row
+├── docs/evidence/                    # outputs captured at each level
+└── .env.example
+```
+
+`kubectl apply -f k8s/` applies files in alphabetical order, which is why they have numeric prefixes. The Secret is not a file: `scripts/create-secret.sh` generates it from `.env`, which git ignores.
+
 ---
 
 ## Level 0 — Prerequisites
@@ -97,13 +169,11 @@ Each level was developed in its own branch and merged through a pull request.
 **Cluster tool:** Docker Desktop, with Kubernetes enabled in *Settings → Kubernetes → Enable Kubernetes*.
 
 ```bash
-$ kubectl config current-context   
-docker-desktop
-
-$ kubectl get nodes 
-NAME             STATUS   ROLES           AGE   VERSION
-docker-desktop   Ready    control-plane   9h    v1.34.1              
+kubectl config current-context   # docker-desktop
+kubectl get nodes                # STATUS must be Ready
 ```
+
+![Node Ready](docs/evidence/level-0/nodes.png)
 
 ## Level 1 — Namespace and first Pod
 
@@ -117,6 +187,8 @@ kubectl describe pod test-pod -n kubernetes-challenge
 kubectl logs test-pod -n kubernetes-challenge
 kubectl delete pod test-pod -n kubernetes-challenge
 ```
+
+![Namespace created](docs/evidence/level-1/namespace.png)
 
 ```text
 $ kubectl delete pod test-pod -n kubernetes-challenge
@@ -150,12 +222,9 @@ kubectl apply -f k8s/
 kubectl rollout status deploy/postgres -n kubernetes-challenge
 ```
 
-The PVC is `Bound` to a PV that the StorageClass created:
+The PVC is `Bound` to a PV that the default StorageClass created:
 
-```text
-NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS
-postgres-pvc   Bound    pvc-447516d8-af91-420c-b769-aaf093dc0c0d   1Gi        RWO            hostpath
-```
+![StorageClass and PVC](docs/evidence/level-2/storageclass.png)
 
 And the database answers through the Service DNS name `postgres.kubernetes-challenge.svc.cluster.local`:
 
@@ -242,6 +311,8 @@ $ curl -s localhost:3000/tasks
 ```
 
 The request travels `curl → port-forward → Service postgrest → PostgREST Pod → Service postgres → Postgres Pod → PVC`.
+
+![Pods and Services](docs/evidence/level-4/services.png)
 
 Full outputs: [init.sql](docs/evidence/level-4/01-init-sql.txt) · [PostgREST logs](docs/evidence/level-4/02-postgrest-logs.txt) · [GET /tasks](docs/evidence/level-4/03-get-tasks.txt)
 
@@ -379,3 +450,39 @@ Under load, each of the 6 replicas used about 70m of CPU, over 140% of its 50m r
 Full outputs: [metrics and HPA](docs/evidence/level-7/01-metrics-and-hpa.txt) · [scale up and down](docs/evidence/level-7/02-scale-up-and-down.txt) · [top under load](docs/evidence/level-7/03-top-under-load.txt)
 
 > **Takeaway:** the HPA compares actual CPU with the **request**, so without `resources.requests` it can't scale. It scales up quickly, and scales down only after the stabilization window to avoid flapping.
+
+## Delivery evidence
+
+Captured after a fresh `./scripts/deploy.sh`.
+
+**Everything running in the namespace:**
+
+![kubectl get all](docs/evidence/delivery/get-all.png)
+
+**The API serving data from the database.** PostgREST connected to PostgreSQL through the Service and returns the row from `init.sql`:
+
+![API integration](docs/evidence/delivery/api.png)
+
+**Persistence, before:** a row is created through the API while Pod `postgres-7c5d4d957b-d26vx` (`10.1.0.45`) is running:
+
+![Persistence before](docs/evidence/delivery/persistence-before.png)
+
+**Persistence, after:** that Pod is deleted and replaced by `postgres-7c5d4d957b-6gr5p` (`10.1.0.46`). The API returns the same rows, with the same `id` and `created_at`:
+
+![Persistence after](docs/evidence/delivery/persistence-after.png)
+
+## Acceptance criteria
+
+| Criterion | Where |
+|---|---|
+| Own namespace, every resource isolated in it | [Level 1](#level-1--namespace-and-first-pod), `k8s/00-namespace.yaml` |
+| PostgreSQL running with a PersistentVolumeClaim | [Level 2](#level-2--postgresql-with-persistence) |
+| Database credentials in a Secret, not hardcoded in YAML | [Level 2](#level-2--postgresql-with-persistence), [Level 3](#level-3--configmap-and-secret), enforced by CI |
+| Non-sensitive configuration in a ConfigMap | [Level 3](#level-3--configmap-and-secret) |
+| API connected to the database by Service name | [Level 4](#level-4--postgrest--postgresql) |
+| API reachable from outside the cluster, serving data from the database | [Level 4](#level-4--postgrest--postgresql), [Level 5](#level-5--external-access-and-persistence-proof) |
+| Data inserted through the API survives deleting the database Pod | [Level 5](#level-5--external-access-and-persistence-proof) |
+| Liveness and readiness probes on the API | [Level 6](#level-6--health-checks-resources-and-scaling) |
+| Resource requests and limits | [Level 6](#level-6--health-checks-resources-and-scaling) |
+| Manifests versioned in organized YAML files | [Repository structure](#repository-structure) |
+| README explaining how to apply and test | [Quick start](#quick-start) |
