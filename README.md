@@ -128,8 +128,9 @@ No resources found in kubernetes-challenge namespace.
 
 Full outputs: [get](docs/evidence/level-1/01-get.txt) · [describe](docs/evidence/level-1/02-describe.txt) · [logs](docs/evidence/level-1/03-logs.txt) · [delete](docs/evidence/level-1/04-delete.txt)
 
-
-> `k8s/extras/` is not applied by `kubectl apply -f k8s/`, because that command is not recursive. The test Pod is a one-off exercise, not part of the stack.
+> **Takeaway:** a bare Pod has no owner, so nothing recreates it. That's why workloads run under a Deployment, whose ReplicaSet recreates missing Pods.
+>
+> `k8s/extras/` is skipped by `kubectl apply -f k8s/` (not recursive). The test Pod is not part of the stack.
 
 ## Level 2 — PostgreSQL with persistence
 
@@ -166,6 +167,8 @@ And the database answers through the Service DNS name `postgres.kubernetes-chall
 
 Full outputs: [PVC and PV](docs/evidence/level-2/01-pvc-pv.txt) · [resources](docs/evidence/level-2/02-resources.txt) · [connection via Service](docs/evidence/level-2/03-connect-via-service.txt)
 
+> **Takeaway:** an `emptyDir` is deleted with its Pod. A PVC outlives the Pod, and the next Pod mounts the same data. `PGDATA` is a subfolder because `initdb` needs an empty directory, and a new volume may contain `lost+found`.
+
 ## Level 3 — ConfigMap and Secret
 
 The Deployment manifest no longer contains any configuration values. It only references where they come from:
@@ -198,14 +201,7 @@ PGDATA=/var/lib/postgresql/data/pgdata
 
 Full outputs: [ConfigMap](docs/evidence/level-3/01-configmap.txt) · [Secret](docs/evidence/level-3/02-secret.txt) · [env in the Pod](docs/evidence/level-3/03-env-in-pod.txt)
 
-**Is the Secret encrypted?** No. The value in `kubectl get secret -o yaml` is only **Base64-encoded**, and anyone can reverse it:
-
-```text
-$ kubectl get secret postgres-secret -n kubernetes-challenge -o jsonpath="{.data.POSTGRES_USER}" | base64 -d
-app
-```
-
-The real protection comes from elsewhere: RBAC limits who can `get` Secrets, and encryption at rest in etcd has to be enabled on the cluster. Also keep the Secret out of git, which is why this repo has no Secret manifest. In production, tools such as Sealed Secrets, External Secrets or a cloud secret manager fill this gap.
+> **Takeaway:** a Secret is only Base64-encoded, not encrypted (`echo YXBw | base64 -d` → `app`). Real protection comes from RBAC, encryption at rest and keeping it out of git.
 
 ## Level 4 — PostgREST + PostgreSQL
 
@@ -249,7 +245,7 @@ The request travels `curl → port-forward → Service postgrest → PostgREST P
 
 Full outputs: [init.sql](docs/evidence/level-4/01-init-sql.txt) · [PostgREST logs](docs/evidence/level-4/02-postgrest-logs.txt) · [GET /tasks](docs/evidence/level-4/03-get-tasks.txt)
 
-**Why the Service name and not the Pod IP?** A Pod's IP belongs to that Pod only. When the database Pod is recreated, it gets a new IP, and a connection string with the old IP would point to nothing. The Service name `postgres` is resolved by the cluster DNS to a stable ClusterIP. The Service keeps its endpoints updated to whichever Pod currently matches `app=postgres`. If the table changes later, `NOTIFY pgrst, 'reload schema'` refreshes the PostgREST cache without a restart.
+> **Takeaway:** a Pod's IP changes when it is recreated, and the Service name doesn't. Connecting by `postgres` keeps working no matter which Pod is behind it.
 
 ## Level 5 — External access and persistence proof
 
@@ -304,15 +300,7 @@ The row came back with the same `id` and `created_at` after the Pod was destroye
 
 Full outputs: [POST and GET before](docs/evidence/level-5/01-post-and-get-before.txt) · [delete](docs/evidence/level-5/02-delete-db-pod.txt) · [watch](docs/evidence/level-5/03-watch-pods.txt) · [new Pod and endpoints](docs/evidence/level-5/04-new-db-pod.txt) · [GET after](docs/evidence/level-5/05-get-after.txt)
 
-**How many pieces had to work together?**
-
-- **Deployment/ReplicaSet** recreated the Pod. The bare Pod in Level 1 had no owner, so nobody did that.
-- **PVC/PV** kept the data outside the Pod. The new Pod mounted the same volume, found `PGDATA` already initialized and skipped `initdb`.
-- **Service** hid the IP change. PostgREST reconnected to `postgres` without knowing the Pod had moved.
-- **Secret and ConfigMap** gave the new Pod the same credentials and settings, so the existing data directory still matched.
-- **PostgREST** kept running the whole time and reconnected on its own.
-
-With an `emptyDir`, the second GET would return `[]`, and even the seed row from `init.sql` would be gone.
+> **Takeaway:** several pieces worked together. The ReplicaSet recreated the Pod, the PVC kept the data, the Service hid the IP change, and the Secret and ConfigMap gave the new Pod the same config. With an `emptyDir`, the second GET would return `[]`.
 
 ## Level 6 — Health checks, resources and scaling
 
@@ -355,6 +343,4 @@ After scaling the database back to 1, all three return to `1/1` and `ready=true`
 
 Full outputs: [probes and resources](docs/evidence/level-6/01-probes-and-resources.txt) · [load balancing](docs/evidence/level-6/02-load-balancing.txt) · [liveness vs readiness](docs/evidence/level-6/03-liveness-vs-readiness.txt)
 
-**Liveness vs readiness:** liveness answers "is the process stuck?", and failing it **restarts** the container. Readiness answers "can it serve right now?", and failing it only **removes the Pod from the Service**. Restarting the API because the database is down would not help, so the API's liveness checks only the process. The dependency check belongs to readiness.
-
-**Why scale the API but not the database?** PostgREST is stateless: every replica reads the same database, so any replica can answer any request. PostgreSQL owns its data directory: two Postgres processes on the same PVC would corrupt it, and a `ReadWriteOnce` volume can't even attach to Pods on different nodes. Scaling a database needs replication (primary + replicas, each with its own volume), usually through a StatefulSet or an operator.
+> **Takeaway:** a failing liveness probe **restarts** the container, while a failing readiness probe only **removes the Pod from the Service**. The API is stateless, so it scales freely. Two Postgres Pods on the same PVC would corrupt the data, so scaling a database needs replication, not more replicas.
