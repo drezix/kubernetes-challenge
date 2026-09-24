@@ -1,0 +1,24 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: postgrest
+  namespace: kubernetes-challenge
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: postgrest
+  minReplicas: 2
+  maxReplicas: 6
+  metrics:
+    # Utilization is relative to the container's CPU request (50m)
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 50
+  behavior:
+    # Default is 300s; shortened so the scale-down is visible in the demo
+    scaleDown:
+      stabilizationWindowSeconds: 60

@@ -1,0 +1,29 @@
+# Sends continuous requests to the API Service to trigger the HPA (Level 7).
+# Each loop opens new connections, so the load is spread across all replicas.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: load-generator
+  namespace: kubernetes-challenge
+  labels:
+    app: load-generator
+spec:
+  restartPolicy: Never
+  containers:
+    - name: load
+      image: busybox:1.36
+      command:
+        - sh
+        - -c
+        - |
+          for i in 1 2 3 4 5 6 7 8; do
+            (while true; do wget -q -O /dev/null http://postgrest:3000/tasks; done) &
+          done
+          wait
+      resources:
+        requests:
+          cpu: 100m
+          memory: 32Mi
+        limits:
+          cpu: "1"
+          memory: 64Mi

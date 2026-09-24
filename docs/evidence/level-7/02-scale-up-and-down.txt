@@ -1,0 +1,27 @@
+# 22:13:01  kubectl apply -f k8s/extras/load-generator.yaml
+# 22:16:18  kubectl delete pod load-generator -n kubernetes-challenge
+
+$ kubectl get hpa postgrest -n kubernetes-challenge -w
+NAME        REFERENCE              TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+postgrest   Deployment/postgrest   cpu: 5%/50%   2         6         2          2m19s
+postgrest   Deployment/postgrest   cpu: 395%/50%   2         6         2          3m
+postgrest   Deployment/postgrest   cpu: 144%/50%   2         6         6          4m
+postgrest   Deployment/postgrest   cpu: 151%/50%   2         6         6          5m
+postgrest   Deployment/postgrest   cpu: 144%/50%   2         6         6          6m
+postgrest   Deployment/postgrest   cpu: 4%/50%     2         6         6          6m59s
+postgrest   Deployment/postgrest   cpu: 7%/50%     2         6         2          7m59s
+
+$ kubectl get deploy postgrest -n kubernetes-challenge -w
+NAME        READY   UP-TO-DATE   AVAILABLE   AGE
+postgrest   2/2     2            2           66m
+postgrest   2/6     2            2           67m
+postgrest   2/6     2            2           67m
+postgrest   2/6     2            2           67m
+postgrest   2/6     6            2           67m
+postgrest   3/6     6            3           67m
+postgrest   4/6     6            4           67m
+postgrest   5/6     6            5           67m
+postgrest   6/6     6            6           67m
+postgrest   6/2     6            6           71m
+postgrest   6/2     6            6           71m
+postgrest   2/2     2            2           71m
