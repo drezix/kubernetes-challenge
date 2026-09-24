@@ -6,7 +6,6 @@ metadata:
   labels:
     app: postgrest
 spec:
-  replicas: 3
   selector:
     matchLabels:
       app: postgrest
