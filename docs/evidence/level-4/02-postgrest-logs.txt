@@ -1,0 +1,8 @@
+$ kubectl logs deploy/postgrest -n kubernetes-challenge
+24/Sep/2026:00:06:14 +0000: Starting PostgREST 12.2.3...
+24/Sep/2026:00:06:14 +0000: Listening on port 3000
+24/Sep/2026:00:06:14 +0000: Listening for notifications on the "pgrst" channel
+24/Sep/2026:00:06:14 +0000: Successfully connected to PostgreSQL 16.15 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+24/Sep/2026:00:06:14 +0000: Config reloaded
+24/Sep/2026:00:06:14 +0000: Schema cache queried in 5.8 milliseconds
+24/Sep/2026:00:06:14 +0000: Schema cache loaded 1 Relations, 0 Relationships, 0 Functions, 0 Domain Representations, 4 Media Type Handlers, 599 Timezones

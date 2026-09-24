@@ -1,0 +1,7 @@
+$ kubectl port-forward svc/postgrest 3000:3000 -n kubernetes-challenge   # other terminal
+
+$ curl -s localhost:3000/tasks
+[{"id":1,"title":"First task, inserted via SQL","done":false,"created_at":"2026-09-24T00:06:12.342752+00:00"}]
+
+$ kubectl get pod -l app=postgrest -n kubernetes-challenge -o jsonpath="{.items[0].spec.containers[0].env[?(@.name==\"PGRST_DB_URI\")].value}"
+postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):5432/$(POSTGRES_DB)

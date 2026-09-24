@@ -1,0 +1,8 @@
+$ kubectl exec -i deploy/postgres -n kubernetes-challenge -- sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < sql/init.sql
+CREATE SCHEMA
+CREATE TABLE
+DO
+GRANT
+GRANT
+GRANT ROLE
+INSERT 0 1
