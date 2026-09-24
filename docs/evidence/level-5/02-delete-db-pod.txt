@@ -1,0 +1,10 @@
+$ kubectl get pods -l app=postgres -n kubernetes-challenge -o wide
+NAME                        READY   STATUS    RESTARTS   AGE     IP          NODE             NOMINATED NODE   READINESS GATES
+postgres-7bb585574f-p2wxk   1/1     Running   0          2m46s   10.1.0.21   docker-desktop   <none>           <none>
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=postgres -n kubernetes-challenge
+NAME             ADDRESSTYPE   PORTS   ENDPOINTS   AGE
+postgres-qjz2w   IPv4          5432    10.1.0.21   6m55s
+
+$ kubectl delete pod postgres-7bb585574f-p2wxk -n kubernetes-challenge
+pod "postgres-7bb585574f-p2wxk" deleted from kubernetes-challenge namespace
