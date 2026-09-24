@@ -1,0 +1,5 @@
+$ kubectl exec deploy/postgres -n kubernetes-challenge -- env | grep -E "^(POSTGRES_(USER|DB)|PGDATA)="
+POSTGRES_USER=app
+POSTGRES_DB=challenge
+PGDATA=/var/lib/postgresql/data/pgdata
+(POSTGRES_PASSWORD is also injected; omitted on purpose)

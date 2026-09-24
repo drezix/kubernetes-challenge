@@ -82,7 +82,7 @@ Each level was developed in its own branch and merged through a pull request.
 - [x] **Level 0 — Prerequisites:** local cluster responding, node `Ready`
 - [x] **Level 1 — Namespace and first Pod:** prove that a bare Pod does not come back by itself
 - [x] **Level 2 — PostgreSQL with persistence:** Deployment + PVC + ClusterIP Service
-- [ ] **Level 3 — ConfigMap and Secret:** configuration and credentials out of the Deployment manifest
+- [x] **Level 3 — ConfigMap and Secret:** configuration and credentials out of the Deployment manifest
 - [ ] **Level 4 — PostgREST + PostgreSQL:** API connected to the database by Service name
 - [ ] **Level 5 — External access and persistence proof:** POST → delete DB Pod → same data on GET
 - [ ] **Level 6 — Health checks, resources and scaling:** probes, requests/limits, multiple API replicas
@@ -168,3 +168,44 @@ Full outputs: [PVC and PV](docs/evidence/level-2/01-pvc-pv.txt) · [resources](d
 **PVC vs `emptyDir`:** an `emptyDir` is created with the Pod and deleted with it. It survives container restarts, but not Pod deletion. A PVC is a separate object with its own lifecycle: when the Pod is deleted, the claim and its PV remain, and the next Pod mounts the same data. Level 5 proves this.
 
 `PGDATA` points to a subfolder (`.../data/pgdata`) because the root of a freshly mounted volume may contain `lost+found`, and `initdb` refuses to run in a non-empty directory.
+
+## Level 3 — ConfigMap and Secret
+
+The Deployment manifest no longer contains any configuration values. It only references where they come from:
+
+| Source | Keys | Why there |
+|---|---|---|
+| ConfigMap [`app-config`](k8s/01-configmap.yaml) | `POSTGRES_DB`, `PGDATA` | Not sensitive, safe to version |
+| Secret `postgres-secret` (from `.env`) | `POSTGRES_USER`, `POSTGRES_PASSWORD` | Credentials, never versioned |
+
+```yaml
+- name: POSTGRES_PASSWORD
+  valueFrom:
+    secretKeyRef:
+      name: postgres-secret
+      key: POSTGRES_PASSWORD
+- name: POSTGRES_DB
+  valueFrom:
+    configMapKeyRef:
+      name: app-config
+      key: POSTGRES_DB
+```
+
+Inside the Pod, the variables arrive as plain environment variables:
+
+```text
+POSTGRES_USER=app
+POSTGRES_DB=challenge
+PGDATA=/var/lib/postgresql/data/pgdata
+```
+
+Full outputs: [ConfigMap](docs/evidence/level-3/01-configmap.txt) · [Secret](docs/evidence/level-3/02-secret.txt) · [env in the Pod](docs/evidence/level-3/03-env-in-pod.txt)
+
+**Is the Secret encrypted?** No. The value in `kubectl get secret -o yaml` is only **Base64-encoded**, and anyone can reverse it:
+
+```text
+$ kubectl get secret postgres-secret -n kubernetes-challenge -o jsonpath="{.data.POSTGRES_USER}" | base64 -d
+app
+```
+
+The real protection comes from elsewhere: RBAC limits who can `get` Secrets, and encryption at rest in etcd has to be enabled on the cluster. Also keep the Secret out of git, which is why this repo has no Secret manifest. In production, tools such as Sealed Secrets, External Secrets or a cloud secret manager fill this gap.
