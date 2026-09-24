@@ -1,0 +1,11 @@
+$ kubectl get pods -l app=postgres -n kubernetes-challenge -o wide
+NAME                        READY   STATUS    RESTARTS   AGE   IP          NODE             NOMINATED NODE   READINESS GATES
+postgres-7bb585574f-5x8xx   1/1     Running   0          5s    10.1.0.23   docker-desktop   <none>           <none>
+
+$ kubectl get svc postgres -n kubernetes-challenge
+NAME       TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE
+postgres   ClusterIP   10.99.185.137   <none>        5432/TCP   7m
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=postgres -n kubernetes-challenge
+NAME             ADDRESSTYPE   PORTS   ENDPOINTS   AGE
+postgres-qjz2w   IPv4          5432    10.1.0.23   7m
