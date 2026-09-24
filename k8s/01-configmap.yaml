@@ -1,0 +1,9 @@
+# Non-sensitive configuration. Credentials live in the postgres-secret Secret.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: kubernetes-challenge
+data:
+  POSTGRES_DB: challenge
+  PGDATA: /var/lib/postgresql/data/pgdata

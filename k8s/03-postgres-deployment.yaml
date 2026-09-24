@@ -36,10 +36,16 @@ spec:
                   name: postgres-secret
                   key: POSTGRES_PASSWORD
             - name: POSTGRES_DB
-              value: challenge
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: POSTGRES_DB
             # Subfolder: the volume root has lost+found, and initdb requires an empty directory
             - name: PGDATA
-              value: /var/lib/postgresql/data/pgdata
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: PGDATA
           volumeMounts:
             - name: postgres-data
               mountPath: /var/lib/postgresql/data

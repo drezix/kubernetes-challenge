@@ -1,0 +1,21 @@
+$ kubectl describe configmap app-config -n kubernetes-challenge
+Name:         app-config
+Namespace:    kubernetes-challenge
+Labels:       <none>
+Annotations:  <none>
+
+Data
+====
+PGDATA:
+----
+/var/lib/postgresql/data/pgdata
+
+POSTGRES_DB:
+----
+challenge
+
+
+BinaryData
+====
+
+Events:  <none>
