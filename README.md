@@ -84,7 +84,7 @@ Each level was developed in its own branch and merged through a pull request.
 - [x] **Level 2 — PostgreSQL with persistence:** Deployment + PVC + ClusterIP Service
 - [x] **Level 3 — ConfigMap and Secret:** configuration and credentials out of the Deployment manifest
 - [x] **Level 4 — PostgREST + PostgreSQL:** API connected to the database by Service name
-- [ ] **Level 5 — External access and persistence proof:** POST → delete DB Pod → same data on GET
+- [x] **Level 5 — External access and persistence proof:** POST → delete DB Pod → same data on GET
 - [ ] **Level 6 — Health checks, resources and scaling:** probes, requests/limits, multiple API replicas
 - [ ] **Level 7 — HPA (bonus):** replicas scaling up and down with CPU load
 
@@ -253,3 +253,66 @@ The request travels `curl → port-forward → Service postgrest → PostgREST P
 Full outputs: [init.sql](docs/evidence/level-4/01-init-sql.txt) · [PostgREST logs](docs/evidence/level-4/02-postgrest-logs.txt) · [GET /tasks](docs/evidence/level-4/03-get-tasks.txt)
 
 **Why the Service name and not the Pod IP?** A Pod's IP belongs to that Pod only. When the database Pod is recreated, it gets a new IP, and a connection string with the old IP would point to nothing. The Service name `postgres` is resolved by the cluster DNS to a stable ClusterIP. The Service keeps its endpoints updated to whichever Pod currently matches `app=postgres`. If the table changes later, `NOTIFY pgrst, 'reload schema'` refreshes the PostgREST cache without a restart.
+
+## Level 5 — External access and persistence proof
+
+The API is exposed to the host with `kubectl port-forward`. The test: write through the API, destroy the database Pod, and read the same data back.
+
+```bash
+kubectl port-forward svc/postgrest 3000:3000 -n kubernetes-challenge   # terminal 1
+kubectl get pods -n kubernetes-challenge -w                             # terminal 2
+```
+
+**1. Write and read through the API**
+
+```text
+$ curl -s -X POST localhost:3000/tasks -H "Content-Type: application/json" \
+    -H "Prefer: return=representation" -d '{"title":"Created via POST - persistence proof"}'
+[{"id":2,"title":"Created via POST - persistence proof","done":false,"created_at":"2026-09-24T00:07:41.838545+00:00"}]
+
+$ curl -s localhost:3000/tasks
+[{"id":1,"title":"First task, inserted via SQL","done":false,"created_at":"2026-09-24T00:06:12.342752+00:00"},
+ {"id":2,"title":"Created via POST - persistence proof","done":false,"created_at":"2026-09-24T00:07:41.838545+00:00"}]
+```
+
+**2. Delete the database Pod**
+
+```text
+$ kubectl delete pod postgres-7bb585574f-p2wxk -n kubernetes-challenge
+pod "postgres-7bb585574f-p2wxk" deleted from kubernetes-challenge namespace
+```
+
+The ReplicaSet notices "want 1, have 0" and creates a replacement right away:
+
+```text
+EVENT      NAME                         READY   STATUS              AGE
+MODIFIED   postgres-7bb585574f-p2wxk    1/1     Terminating         2m46s
+ADDED      postgres-7bb585574f-5x8xx    0/1     Pending             0s
+MODIFIED   postgres-7bb585574f-5x8xx    0/1     ContainerCreating   0s
+MODIFIED   postgres-7bb585574f-5x8xx    1/1     Running             2s
+DELETED    postgres-7bb585574f-p2wxk    0/1     Completed           2m48s
+```
+
+The new Pod has a new name and IP (`10.1.0.21` → `10.1.0.23`). The Service keeps the same ClusterIP (`10.99.185.137`) and updates only its endpoint.
+
+**3. Read again**
+
+```text
+$ curl -s localhost:3000/tasks
+[{"id":1,"title":"First task, inserted via SQL","done":false,"created_at":"2026-09-24T00:06:12.342752+00:00"},
+ {"id":2,"title":"Created via POST - persistence proof","done":false,"created_at":"2026-09-24T00:07:41.838545+00:00"}]
+```
+
+The row came back with the same `id` and `created_at` after the Pod was destroyed. ✅
+
+Full outputs: [POST and GET before](docs/evidence/level-5/01-post-and-get-before.txt) · [delete](docs/evidence/level-5/02-delete-db-pod.txt) · [watch](docs/evidence/level-5/03-watch-pods.txt) · [new Pod and endpoints](docs/evidence/level-5/04-new-db-pod.txt) · [GET after](docs/evidence/level-5/05-get-after.txt)
+
+**How many pieces had to work together?**
+
+- **Deployment/ReplicaSet** recreated the Pod. The bare Pod in Level 1 had no owner, so nobody did that.
+- **PVC/PV** kept the data outside the Pod. The new Pod mounted the same volume, found `PGDATA` already initialized and skipped `initdb`.
+- **Service** hid the IP change. PostgREST reconnected to `postgres` without knowing the Pod had moved.
+- **Secret and ConfigMap** gave the new Pod the same credentials and settings, so the existing data directory still matched.
+- **PostgREST** kept running the whole time and reconnected on its own.
+
+With an `emptyDir`, the second GET would return `[]`, and even the seed row from `init.sql` would be gone.

@@ -1,0 +1,13 @@
+$ kubectl get pods -n kubernetes-challenge -w --output-watch-events   # other terminal
+EVENT      NAME                         READY   STATUS    RESTARTS   AGE
+ADDED      postgres-7bb585574f-p2wxk    1/1     Running   0          2m42s
+ADDED      postgrest-7fd67f869b-2xh7g   1/1     Running   0          85s
+MODIFIED   postgres-7bb585574f-p2wxk    1/1     Terminating   0          2m46s
+ADDED      postgres-7bb585574f-5x8xx    0/1     Pending       0          0s
+MODIFIED   postgres-7bb585574f-p2wxk    1/1     Terminating   0          2m46s
+MODIFIED   postgres-7bb585574f-5x8xx    0/1     Pending       0          0s
+MODIFIED   postgres-7bb585574f-5x8xx    0/1     ContainerCreating   0          0s
+MODIFIED   postgres-7bb585574f-p2wxk    0/1     Completed           0          2m47s
+MODIFIED   postgres-7bb585574f-5x8xx    1/1     Running             0          2s
+MODIFIED   postgres-7bb585574f-p2wxk    0/1     Completed           0          2m48s
+DELETED    postgres-7bb585574f-p2wxk    0/1     Completed           0          2m48s
