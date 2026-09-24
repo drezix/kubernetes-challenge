@@ -9,3 +9,5 @@ data:
   DB_HOST: postgres
   PGRST_DB_SCHEMAS: api
   PGRST_DB_ANON_ROLE: web_anon
+  PGRST_ADMIN_SERVER_PORT: "3001"
+  PGRST_LOG_LEVEL: info

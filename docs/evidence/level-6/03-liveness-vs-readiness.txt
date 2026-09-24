@@ -1,0 +1,32 @@
+# Database down: readiness fails, liveness keeps passing
+$ kubectl scale deploy/postgres --replicas=0 -n kubernetes-challenge
+deployment.apps/postgres scaled
+
+$ kubectl get pods -l app=postgrest -n kubernetes-challenge
+NAME                         READY   STATUS    RESTARTS   AGE
+postgrest-847c756c5c-6sl9n   0/1     Running   0          2m49s
+postgrest-847c756c5c-77cr8   0/1     Running   0          2m54s
+postgrest-847c756c5c-xsg9d   0/1     Running   0          3m28s
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=postgrest -n kubernetes-challenge -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]}{"  ready="}{.conditions.ready}{"\n"}{end}'
+10.1.0.27  ready=false
+10.1.0.29  ready=false
+10.1.0.30  ready=false
+
+$ kubectl describe pod <postgrest pod> -n kubernetes-challenge | grep Unhealthy
+  Warning  Unhealthy  0s (x22 over 110s)  kubelet            Readiness probe failed: HTTP probe failed with statuscode: 503
+
+# Database back: Pods become Ready again, with no restart
+$ kubectl scale deploy/postgres --replicas=1 -n kubernetes-challenge
+deployment.apps/postgres scaled
+
+$ kubectl get pods -l app=postgrest -n kubernetes-challenge
+NAME                         READY   STATUS    RESTARTS   AGE
+postgrest-847c756c5c-6sl9n   1/1     Running   0          3m15s
+postgrest-847c756c5c-77cr8   1/1     Running   0          3m20s
+postgrest-847c756c5c-xsg9d   1/1     Running   0          3m54s
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=postgrest -n kubernetes-challenge -o jsonpath='{range .items[*].endpoints[*]}{.addresses[0]}{"  ready="}{.conditions.ready}{"\n"}{end}'
+10.1.0.27  ready=true
+10.1.0.29  ready=true
+10.1.0.30  ready=true
