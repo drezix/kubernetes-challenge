@@ -1,0 +1,42 @@
+$ kubectl get deploy,pods -n kubernetes-challenge -l "app in (postgres,postgrest)" -o wide
+NAME                        READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES                        SELECTOR
+deployment.apps/postgres    1/1     1            1           60m   postgres     postgres:16-alpine            app=postgres
+deployment.apps/postgrest   3/3     3            3           55m   postgrest    postgrest/postgrest:v12.2.3   app=postgrest
+
+NAME                             READY   STATUS    RESTARTS   AGE   IP          NODE             NOMINATED NODE   READINESS GATES
+pod/postgres-7c5d4d957b-rr4js    1/1     Running   0          56s   10.1.0.28   docker-desktop   <none>           <none>
+pod/postgrest-847c756c5c-6sl9n   1/1     Running   0          25s   10.1.0.30   docker-desktop   <none>           <none>
+pod/postgrest-847c756c5c-77cr8   1/1     Running   0          30s   10.1.0.29   docker-desktop   <none>           <none>
+pod/postgrest-847c756c5c-xsg9d   1/1     Running   0          64s   10.1.0.27   docker-desktop   <none>           <none>
+
+$ kubectl get endpointslices -l kubernetes.io/service-name=postgrest -n kubernetes-challenge
+NAME              ADDRESSTYPE   PORTS   ENDPOINTS                       AGE
+postgrest-9hh47   IPv4          3000    10.1.0.27,10.1.0.29,10.1.0.30   55m
+
+$ kubectl describe deploy postgrest -n kubernetes-challenge | grep -E "Replicas|Liveness|Readiness|Limits|Requests|cpu|memory"
+Replicas:               3 desired | 3 updated | 3 total | 3 available | 0 unavailable
+    Limits:
+      cpu:     250m
+      memory:  128Mi
+    Requests:
+      cpu:      50m
+      memory:   64Mi
+    Liveness:   http-get http://:admin/live delay=5s timeout=1s period=10s #success=1 #failure=3
+    Readiness:  http-get http://:admin/ready delay=2s timeout=1s period=5s #success=1 #failure=2
+  Available      True    MinimumReplicasAvailable
+
+$ kubectl describe deploy postgres -n kubernetes-challenge | grep -E "Liveness|Readiness|Limits|Requests|cpu|memory"
+    Limits:
+      cpu:     500m
+      memory:  512Mi
+    Requests:
+      cpu:      100m
+      memory:   256Mi
+    Liveness:   exec [sh -c pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"] delay=30s timeout=1s period=10s #success=1 #failure=6
+    Readiness:  exec [sh -c pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"] delay=5s timeout=1s period=5s #success=1 #failure=3
+
+$ kubectl get pods -n kubernetes-challenge -l app=postgrest -o custom-columns=NAME:.metadata.name,QOS:.status.qosClass
+NAME                         QOS
+postgrest-847c756c5c-6sl9n   Burstable
+postgrest-847c756c5c-77cr8   Burstable
+postgrest-847c756c5c-xsg9d   Burstable

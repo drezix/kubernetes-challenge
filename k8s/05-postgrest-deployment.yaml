@@ -6,7 +6,8 @@ metadata:
   labels:
     app: postgrest
 spec:
-  replicas: 1
+  # Stateless: any replica can serve any request
+  replicas: 3
   selector:
     matchLabels:
       app: postgrest
@@ -21,6 +22,8 @@ spec:
           ports:
             - containerPort: 3000
               name: http
+            - containerPort: 3001
+              name: admin
           env:
             - name: POSTGRES_USER
               valueFrom:
@@ -52,7 +55,41 @@ spec:
                 configMapKeyRef:
                   name: app-config
                   key: PGRST_DB_ANON_ROLE
+            - name: PGRST_ADMIN_SERVER_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: PGRST_ADMIN_SERVER_PORT
+            - name: PGRST_LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: app-config
+                  key: PGRST_LOG_LEVEL
             # $(VAR) is expanded by Kubernetes from the variables above,
             # so the password is never written in this file
             - name: PGRST_DB_URI
               value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):5432/$(POSTGRES_DB)
+          # Liveness: is the process alive? Failing it restarts the container.
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: admin
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          # Readiness: can it serve now (DB connected, schema cache loaded)?
+          # Failing it only removes the Pod from the Service endpoints.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: admin
+            initialDelaySeconds: 2
+            periodSeconds: 5
+            failureThreshold: 2
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi

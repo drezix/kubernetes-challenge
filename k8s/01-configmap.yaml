@@ -11,3 +11,7 @@ data:
   DB_HOST: postgres
   PGRST_DB_SCHEMAS: api
   PGRST_DB_ANON_ROLE: web_anon
+  # Admin server with the /live and /ready endpoints used by the probes
+  PGRST_ADMIN_SERVER_PORT: "3001"
+  # info logs every request, which shows the load balancing between replicas
+  PGRST_LOG_LEVEL: info
