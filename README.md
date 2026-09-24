@@ -81,7 +81,7 @@ Each level was developed in its own branch and merged through a pull request.
 
 - [x] **Level 0 — Prerequisites:** local cluster responding, node `Ready`
 - [x] **Level 1 — Namespace and first Pod:** prove that a bare Pod does not come back by itself
-- [ ] **Level 2 — PostgreSQL with persistence:** Deployment + PVC + ClusterIP Service
+- [x] **Level 2 — PostgreSQL with persistence:** Deployment + PVC + ClusterIP Service
 - [ ] **Level 3 — ConfigMap and Secret:** configuration and credentials out of the Deployment manifest
 - [ ] **Level 4 — PostgREST + PostgreSQL:** API connected to the database by Service name
 - [ ] **Level 5 — External access and persistence proof:** POST → delete DB Pod → same data on GET
@@ -129,3 +129,42 @@ Full outputs: [get](docs/evidence/level-1/01-get.txt) · [describe](docs/evidenc
 **Does the deleted Pod come back by itself?** No. The Pod has no `ownerReferences`: no ReplicaSet is watching it, so nobody notices it is gone. That's why Pods are rarely created directly. A Deployment creates a ReplicaSet, which keeps comparing "desired" with "actual" and recreates missing Pods. Level 5 relies on exactly that.
 
 > `k8s/extras/` is not applied by `kubectl apply -f k8s/`, because that command is not recursive. The test Pod is a one-off exercise, not part of the stack.
+
+## Level 2 — PostgreSQL with persistence
+
+| File | What it does |
+|---|---|
+| [`k8s/02-postgres-pvc.yaml`](k8s/02-postgres-pvc.yaml) | Requests 1Gi of storage (`ReadWriteOnce`). The default StorageClass (`hostpath`) provisions a PV for it on demand. |
+| [`k8s/03-postgres-deployment.yaml`](k8s/03-postgres-deployment.yaml) | `postgres:16-alpine`, 1 replica, the PVC mounted at `/var/lib/postgresql/data`. Strategy `Recreate`, so two Pods never fight over the same volume. |
+| [`k8s/04-postgres-service.yaml`](k8s/04-postgres-service.yaml) | ClusterIP Service `postgres`: a stable name and IP in front of the Pod. |
+| [`scripts/create-secret.sh`](scripts/create-secret.sh) | Creates the `postgres-secret` Secret from a local `.env` file. |
+
+The credentials never touch a versioned file. `.env` is git-ignored, and [`.env.example`](.env.example) is the template. The Deployment only references the Secret through `secretKeyRef`. CI fails the build if a manifest contains a literal password or a `kind: Secret`.
+
+```bash
+cp .env.example .env               # then set a real password: openssl rand -hex 16
+./scripts/create-secret.sh
+kubectl apply -f k8s/
+kubectl rollout status deploy/postgres -n kubernetes-challenge
+```
+
+The PVC is `Bound` to a PV that the StorageClass created:
+
+```text
+NAME           STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS
+postgres-pvc   Bound    pvc-447516d8-af91-420c-b769-aaf093dc0c0d   1Gi        RWO            hostpath
+```
+
+And the database answers through the Service DNS name `postgres.kubernetes-challenge.svc.cluster.local`:
+
+```text
+ current_user | current_database | inet_server_addr |  version
+--------------+------------------+------------------+----------------------------------
+ app          | challenge        | 10.1.0.20        | PostgreSQL 16.15 on x86_64-pc-...
+```
+
+Full outputs: [PVC and PV](docs/evidence/level-2/01-pvc-pv.txt) · [resources](docs/evidence/level-2/02-resources.txt) · [connection via Service](docs/evidence/level-2/03-connect-via-service.txt)
+
+**PVC vs `emptyDir`:** an `emptyDir` is created with the Pod and deleted with it. It survives container restarts, but not Pod deletion. A PVC is a separate object with its own lifecycle: when the Pod is deleted, the claim and its PV remain, and the next Pod mounts the same data. Level 5 proves this.
+
+`PGDATA` points to a subfolder (`.../data/pgdata`) because the root of a freshly mounted volume may contain `lost+found`, and `initdb` refuses to run in a non-empty directory.

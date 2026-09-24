@@ -1,0 +1,32 @@
+$ kubectl exec deploy/postgres -n kubernetes-challenge -- sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" psql -h postgres.kubernetes-challenge.svc.cluster.local -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "select current_user, current_database(), inet_server_addr(), version();"'
+ current_user | current_database | inet_server_addr |                                         version                                          
+--------------+------------------+------------------+------------------------------------------------------------------------------------------
+ app          | challenge        | 10.1.0.20        | PostgreSQL 16.15 on x86_64-pc-linux-musl, compiled by gcc (Alpine 15.2.0) 15.2.0, 64-bit
+(1 row)
+
+
+$ kubectl exec deploy/postgres -n kubernetes-challenge -- ls /var/lib/postgresql/data/pgdata
+PG_VERSION
+base
+global
+pg_commit_ts
+pg_dynshmem
+pg_hba.conf
+pg_ident.conf
+pg_logical
+pg_multixact
+pg_notify
+pg_replslot
+pg_serial
+pg_snapshots
+pg_stat
+pg_stat_tmp
+pg_subtrans
+pg_tblspc
+pg_twophase
+pg_wal
+pg_xact
+postgresql.auto.conf
+postgresql.conf
+postmaster.opts
+postmaster.pid

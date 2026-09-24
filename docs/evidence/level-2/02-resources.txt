@@ -1,0 +1,15 @@
+$ kubectl get deploy,rs,pods,svc,endpointslices -n kubernetes-challenge -o wide
+NAME                       READY   UP-TO-DATE   AVAILABLE   AGE   CONTAINERS   IMAGES               SELECTOR
+deployment.apps/postgres   1/1     1            1           39s   postgres     postgres:16-alpine   app=postgres
+
+NAME                                  DESIRED   CURRENT   READY   AGE   CONTAINERS   IMAGES               SELECTOR
+replicaset.apps/postgres-86c775f44f   1         1         1       39s   postgres     postgres:16-alpine   app=postgres,pod-template-hash=86c775f44f
+
+NAME                            READY   STATUS    RESTARTS   AGE   IP          NODE             NOMINATED NODE   READINESS GATES
+pod/postgres-86c775f44f-xz7p6   1/1     Running   0          39s   10.1.0.20   docker-desktop   <none>           <none>
+
+NAME               TYPE        CLUSTER-IP      EXTERNAL-IP   PORT(S)    AGE   SELECTOR
+service/postgres   ClusterIP   10.99.185.137   <none>        5432/TCP   39s   app=postgres
+
+NAME                                            ADDRESSTYPE   PORTS   ENDPOINTS   AGE
+endpointslice.discovery.k8s.io/postgres-qjz2w   IPv4          5432    10.1.0.20   39s
