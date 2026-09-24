@@ -103,6 +103,12 @@ cp .env.example .env                  # set POSTGRES_PASSWORD, e.g. openssl rand
 ./scripts/deploy.sh                   # namespace, Secret, manifests and sql/init.sql
 ```
 
+Why a script and not just `kubectl apply -f k8s/`:
+
+- **Order matters.** The Secret doesn't exist as a file: `create-secret.sh` builds it from `.env` after the namespace exists. Then `sql/init.sql` must run once Postgres is up, because it creates the table and the role that PostgREST uses.
+- **Use a hex password** (`openssl rand -hex 16`). The password goes inside the connection URI `postgres://user:password@host/db`, and characters such as `@`, `/` or `:` would break it.
+- **`k8s/extras/` is not applied.** `kubectl apply -f k8s/` doesn't descend into subfolders. `test-pod.yaml` (Level 1) and `load-generator.yaml` (Level 7) are applied by hand.
+
 Test the integration:
 
 ```bash
