@@ -83,7 +83,7 @@ Each level was developed in its own branch and merged through a pull request.
 - [x] **Level 1 — Namespace and first Pod:** prove that a bare Pod does not come back by itself
 - [x] **Level 2 — PostgreSQL with persistence:** Deployment + PVC + ClusterIP Service
 - [x] **Level 3 — ConfigMap and Secret:** configuration and credentials out of the Deployment manifest
-- [ ] **Level 4 — PostgREST + PostgreSQL:** API connected to the database by Service name
+- [x] **Level 4 — PostgREST + PostgreSQL:** API connected to the database by Service name
 - [ ] **Level 5 — External access and persistence proof:** POST → delete DB Pod → same data on GET
 - [ ] **Level 6 — Health checks, resources and scaling:** probes, requests/limits, multiple API replicas
 - [ ] **Level 7 — HPA (bonus):** replicas scaling up and down with CPU load
@@ -209,3 +209,47 @@ app
 ```
 
 The real protection comes from elsewhere: RBAC limits who can `get` Secrets, and encryption at rest in etcd has to be enabled on the cluster. Also keep the Secret out of git, which is why this repo has no Secret manifest. In production, tools such as Sealed Secrets, External Secrets or a cloud secret manager fill this gap.
+
+## Level 4 — PostgREST + PostgreSQL
+
+| File | What it does |
+|---|---|
+| [`sql/init.sql`](sql/init.sql) | Creates schema `api`, table `api.tasks`, the anonymous role `web_anon` with `SELECT`/`INSERT`, and one seed row. Idempotent. |
+| [`k8s/01-configmap.yaml`](k8s/01-configmap.yaml) | Adds `DB_HOST: postgres` (the Service name) and the PostgREST settings. |
+| [`k8s/05-postgrest-deployment.yaml`](k8s/05-postgrest-deployment.yaml) | `postgrest/postgrest:v12.2.3`, reusing the same Secret as the database. |
+| [`k8s/06-postgrest-service.yaml`](k8s/06-postgrest-service.yaml) | ClusterIP Service `postgrest` on port 3000. |
+
+The connection string is assembled by Kubernetes from the other variables, so the password is never written in the manifest:
+
+```yaml
+- name: PGRST_DB_URI
+  value: postgres://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(DB_HOST):5432/$(POSTGRES_DB)
+```
+
+Create the table **before** starting the API. PostgREST loads its schema cache at startup:
+
+```bash
+kubectl exec -i deploy/postgres -n kubernetes-challenge -- \
+  sh -c 'psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < sql/init.sql
+kubectl apply -f k8s/
+kubectl rollout status deploy/postgrest -n kubernetes-challenge
+```
+
+The logs show that the API found the database through the Service and loaded the table:
+
+```text
+Successfully connected to PostgreSQL 16.15 on x86_64-pc-linux-musl, ...
+Schema cache loaded 1 Relations, 0 Relationships, 0 Functions, ...
+```
+
+```text
+$ kubectl port-forward svc/postgrest 3000:3000 -n kubernetes-challenge   # other terminal
+$ curl -s localhost:3000/tasks
+[{"id":1,"title":"First task, inserted via SQL","done":false,"created_at":"2026-09-24T00:06:12.342752+00:00"}]
+```
+
+The request travels `curl → port-forward → Service postgrest → PostgREST Pod → Service postgres → Postgres Pod → PVC`.
+
+Full outputs: [init.sql](docs/evidence/level-4/01-init-sql.txt) · [PostgREST logs](docs/evidence/level-4/02-postgrest-logs.txt) · [GET /tasks](docs/evidence/level-4/03-get-tasks.txt)
+
+**Why the Service name and not the Pod IP?** A Pod's IP belongs to that Pod only. When the database Pod is recreated, it gets a new IP, and a connection string with the old IP would point to nothing. The Service name `postgres` is resolved by the cluster DNS to a stable ClusterIP. The Service keeps its endpoints updated to whichever Pod currently matches `app=postgres`. If the table changes later, `NOTIFY pgrst, 'reload schema'` refreshes the PostgREST cache without a restart.

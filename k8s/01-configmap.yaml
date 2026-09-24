@@ -6,3 +6,6 @@ metadata:
 data:
   POSTGRES_DB: challenge
   PGDATA: /var/lib/postgresql/data/pgdata
+  DB_HOST: postgres
+  PGRST_DB_SCHEMAS: api
+  PGRST_DB_ANON_ROLE: web_anon
