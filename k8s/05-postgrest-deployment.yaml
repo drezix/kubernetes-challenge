@@ -6,8 +6,7 @@ metadata:
   labels:
     app: postgrest
 spec:
-  # Stateless: any replica can serve any request
-  replicas: 3
+  # No "replicas" here: the HPA (07-postgrest-hpa.yaml) owns the replica count
   selector:
     matchLabels:
       app: postgrest

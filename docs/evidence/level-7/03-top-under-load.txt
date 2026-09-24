@@ -1,0 +1,11 @@
+$ kubectl top pods -n kubernetes-challenge   # under load
+NAME                         CPU(cores)   MEMORY(bytes)   
+load-generator               1007m        7Mi             
+postgres-7c5d4d957b-gkbfl    210m         117Mi           
+postgrest-847c756c5c-6wd55   73m          49Mi            
+postgrest-847c756c5c-77cr8   78m          49Mi            
+postgrest-847c756c5c-88f9l   67m          47Mi            
+postgrest-847c756c5c-nf4bl   71m          48Mi            
+postgrest-847c756c5c-rznhw   68m          48Mi            
+postgrest-847c756c5c-v7czm   73m          48Mi            
+test-pod                     0m           12Mi            
