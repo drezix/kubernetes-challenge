@@ -1,0 +1,7 @@
+$ kubectl top nodes
+NAME             CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
+docker-desktop   1273m        7%       2581Mi          33%         
+
+$ kubectl get hpa -n kubernetes-challenge
+NAME        REFERENCE              TARGETS       MINPODS   MAXPODS   REPLICAS   AGE
+postgrest   Deployment/postgrest   cpu: 5%/50%   2         6         2          2m19s

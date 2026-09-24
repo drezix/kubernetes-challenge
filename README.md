@@ -86,7 +86,7 @@ Each level was developed in its own branch and merged through a pull request.
 - [x] **Level 4 — PostgREST + PostgreSQL:** API connected to the database by Service name
 - [x] **Level 5 — External access and persistence proof:** POST → delete DB Pod → same data on GET
 - [x] **Level 6 — Health checks, resources and scaling:** probes, requests/limits, multiple API replicas
-- [ ] **Level 7 — HPA (bonus):** replicas scaling up and down with CPU load
+- [x] **Level 7 — HPA (bonus):** replicas scaling up and down with CPU load
 
 **Out of scope, on purpose:** Ingress, StatefulSet, Helm, cloud clusters, CD, TLS, database backups and JWT auth in PostgREST.
 
@@ -304,7 +304,7 @@ Full outputs: [POST and GET before](docs/evidence/level-5/01-post-and-get-before
 
 ## Level 6 — Health checks, resources and scaling
 
-| | PostgREST (3 replicas) | PostgreSQL (1 replica) |
+| | PostgREST (3 replicas; HPA-managed from Level 7) | PostgreSQL (1 replica) |
 |---|---|---|
 | **Liveness** | `GET /live` on the admin port 3001 | `pg_isready`, 30s initial delay, 6 failures allowed |
 | **Readiness** | `GET /ready` on port 3001 (DB connected, schema cache loaded) | `pg_isready` |
@@ -344,3 +344,38 @@ After scaling the database back to 1, all three return to `1/1` and `ready=true`
 Full outputs: [probes and resources](docs/evidence/level-6/01-probes-and-resources.txt) · [load balancing](docs/evidence/level-6/02-load-balancing.txt) · [liveness vs readiness](docs/evidence/level-6/03-liveness-vs-readiness.txt)
 
 > **Takeaway:** a failing liveness probe **restarts** the container, while a failing readiness probe only **removes the Pod from the Service**. The API is stateless, so it scales freely. Two Postgres Pods on the same PVC would corrupt the data, so scaling a database needs replication, not more replicas.
+
+## Level 7 — HPA (bonus)
+
+| File | What it does |
+|---|---|
+| [`scripts/install-metrics-server.sh`](scripts/install-metrics-server.sh) | Installs metrics-server v0.7.2 with `--kubelet-insecure-tls` (Docker Desktop's kubelet uses a self-signed certificate). |
+| [`k8s/07-postgrest-hpa.yaml`](k8s/07-postgrest-hpa.yaml) | 2–6 replicas, target 50% of the CPU **request** (50m). Scale-down window shortened to 60s for the demo. |
+| [`k8s/extras/load-generator.yaml`](k8s/extras/load-generator.yaml) | busybox Pod running 8 parallel `wget` loops against `http://postgrest:3000/tasks`. |
+
+`replicas` was removed from the PostgREST Deployment. Otherwise every `kubectl apply` would reset the count the HPA chose.
+
+```bash
+./scripts/install-metrics-server.sh
+kubectl top pods -n kubernetes-challenge
+kubectl apply -f k8s/07-postgrest-hpa.yaml
+kubectl get hpa -n kubernetes-challenge -w                  # other terminal
+kubectl apply -f k8s/extras/load-generator.yaml             # start the load
+kubectl delete pod load-generator -n kubernetes-challenge   # stop it
+```
+
+```text
+TARGETS         REPLICAS   AGE
+cpu: 5%/50%     2          2m19s     # idle, at minReplicas
+cpu: 395%/50%   2          3m        # load started
+cpu: 144%/50%   6          4m        # scaled to maxReplicas
+cpu: 151%/50%   6          5m
+cpu: 4%/50%     6          6m59s     # load stopped, stabilization window
+cpu: 7%/50%     2          7m59s     # back to minReplicas
+```
+
+Under load, each of the 6 replicas used about 70m of CPU, over 140% of its 50m request. About 2 minutes after the load stopped, the HPA went back to 2.
+
+Full outputs: [metrics and HPA](docs/evidence/level-7/01-metrics-and-hpa.txt) · [scale up and down](docs/evidence/level-7/02-scale-up-and-down.txt) · [top under load](docs/evidence/level-7/03-top-under-load.txt)
+
+> **Takeaway:** the HPA compares actual CPU with the **request**, so without `resources.requests` it can't scale. It scales up quickly, and scales down only after the stabilization window to avoid flapping.
