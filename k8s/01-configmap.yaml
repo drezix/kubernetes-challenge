@@ -7,3 +7,7 @@ metadata:
 data:
   POSTGRES_DB: challenge
   PGDATA: /var/lib/postgresql/data/pgdata
+  # Service name of the database: resolved by the cluster DNS, never a Pod IP
+  DB_HOST: postgres
+  PGRST_DB_SCHEMAS: api
+  PGRST_DB_ANON_ROLE: web_anon
